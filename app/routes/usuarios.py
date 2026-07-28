@@ -1,0 +1,28 @@
+from fastapi import APIRouter
+from app.database.supabase import supabase
+from app.schemas.usuario import UsuarioCrear
+import random
+
+router = APIRouter(prefix="/usuarios", tags=["Usuarios"])
+
+@router.post("/crear")
+def crear_usuario(usuario: UsuarioCrear):
+
+    codigo = "MC" + str(random.randint(100000,999999))
+
+    datos = {
+        "nombres": usuario.nombres,
+        "email": usuario.email,
+        "celular": usuario.celular,
+        "password": usuario.password,
+        "codigo_referido": codigo,
+        "tickets": 1
+    }
+
+    respuesta = supabase.table("usuarios").insert(datos).execute()
+
+    return {
+        "ok": True,
+        "mensaje": "Usuario registrado correctamente",
+        "codigo_referido": codigo
+    }
