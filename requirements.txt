@@ -5,3 +5,5 @@ supabase
 email-validator
 pydantic
 httpx
+passlib[bcrypt]
+bcrypt
