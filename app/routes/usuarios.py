@@ -1,5 +1,6 @@
 import random
 
+from passlib.context import CryptContext
 from fastapi import APIRouter
 from postgrest.exceptions import APIError
 
@@ -9,7 +10,7 @@ from app.schemas.usuario import UsuarioCrear
 
 router = APIRouter(prefix="/usuarios", tags=["Usuarios"])
 
-
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 @router.post("/crear")
 def crear_usuario(usuario: UsuarioCrear):
     codigo = "MC" + str(random.randint(100000, 999999))
@@ -19,7 +20,7 @@ def crear_usuario(usuario: UsuarioCrear):
         "apellidos": "",
         "email": usuario.email,
         "celular": usuario.celular,
-        "password": usuario.password,
+        "password": pwd_context.hash(usuario.password),
         "codigo_referido": codigo,
         "tickets": 1,
     }
