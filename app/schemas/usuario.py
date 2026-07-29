@@ -14,3 +14,8 @@ class UsuarioLogin(BaseModel):
 
 class RecuperarPassword(BaseModel):
     email: EmailStr
+
+class RestablecerPassword(BaseModel):
+    email: EmailStr
+    codigo: str
+    nueva_password: str
