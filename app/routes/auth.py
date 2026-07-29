@@ -24,21 +24,21 @@ def login(datos: UsuarioLogin):
     usuario = respuesta.data[0]
 
     try:
-    password_valida = password_hash.verify(
-        datos.password,
-        usuario["password"]
-    )
-except Exception:
-    raise HTTPException(
-        status_code=401,
-        detail="Esta cuenta debe restablecer su contraseña"
-    )
+        password_valida = password_hash.verify(
+            datos.password,
+            usuario["password"]
+        )
+    except Exception:
+        raise HTTPException(
+            status_code=401,
+            detail="Esta cuenta debe restablecer su contraseña"
+        )
 
-if not password_valida:
-    raise HTTPException(
-        status_code=401,
-        detail="Correo o contraseña incorrectos"
-    )
+    if not password_valida:
+        raise HTTPException(
+            status_code=401,
+            detail="Correo o contraseña incorrectos"
+        )
 
     return {
         "ok": True,
