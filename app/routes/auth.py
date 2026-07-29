@@ -49,7 +49,11 @@ def login(datos: UsuarioLogin):
         "usuario_id": usuario["id"],
         "nombres": usuario["nombres"],
         "estado_plan": usuario["estado_plan"],
-        "rol": usuario["rol"],
+        "plan": usuario["plan"],
+        "tickets": usuario["tickets"],
+        "codigo_referido": usuario["codigo_referido"],
+        "referido_por": usuario["referido_por"],
+        "rol": usuario["rol"]
     }
 import random
 from datetime import datetime, timedelta, timezone
