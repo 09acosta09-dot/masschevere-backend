@@ -11,3 +11,6 @@ class UsuarioCrear(BaseModel):
 class UsuarioLogin(BaseModel):
     email: EmailStr
     password: str
+
+class RecuperarPassword(BaseModel):
+    email: EmailStr
