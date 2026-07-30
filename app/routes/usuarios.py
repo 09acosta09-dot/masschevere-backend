@@ -1,14 +1,13 @@
 import random
 
-from pwdlib import PasswordHash
-
-password_hash = PasswordHash.recommended()
 from fastapi import APIRouter
 from postgrest.exceptions import APIError
+from pwdlib import PasswordHash
 
 from app.database.supabase import supabase
 from app.schemas.usuario import UsuarioCrear
 
+password_hash = PasswordHash.recommended()
 
 router = APIRouter(prefix="/usuarios", tags=["Usuarios"])
 
@@ -17,6 +16,24 @@ router = APIRouter(prefix="/usuarios", tags=["Usuarios"])
 def crear_usuario(usuario: UsuarioCrear):
     codigo = "MC" + str(random.randint(100000, 999999))
 
+    referido_por = None
+
+    if usuario.codigo_referido:
+        consulta = (
+            supabase.table("usuarios")
+            .select("id")
+            .eq("codigo_referido", usuario.codigo_referido)
+            .execute()
+        )
+
+        if not consulta.data:
+            return {
+                "ok": False,
+                "mensaje": "El código de referido no es válido."
+            }
+
+        referido_por = consulta.data[0]["id"]
+
     datos = {
         "nombres": usuario.nombres,
         "apellidos": "",
@@ -24,11 +41,22 @@ def crear_usuario(usuario: UsuarioCrear):
         "celular": usuario.celular,
         "password": password_hash.hash(usuario.password),
         "codigo_referido": codigo,
+        "referido_por": referido_por,
         "tickets": 1,
     }
 
     try:
         respuesta = supabase.table("usuarios").insert(datos).execute()
+
+        nuevo_usuario = respuesta.data[0]
+
+        if referido_por:
+            supabase.table("referidos").insert({
+                "usuario_id": referido_por,
+                "referido_id": nuevo_usuario["id"],
+                "codigo_usado": usuario.codigo_referido,
+                "ticket_otorgado": False
+            }).execute()
 
         return {
             "ok": True,

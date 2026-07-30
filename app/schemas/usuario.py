@@ -6,6 +6,7 @@ class UsuarioCrear(BaseModel):
     email: EmailStr
     celular: str
     password: str
+    codigo_referido: str | None = None
 
 
 class UsuarioLogin(BaseModel):
