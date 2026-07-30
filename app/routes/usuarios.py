@@ -51,26 +51,26 @@ def crear_usuario(usuario: UsuarioCrear):
         nuevo_usuario = respuesta.data[0]
 
         if referido_por:
-    usuario_referidor = (
-        supabase.table("usuarios")
-        .select("tickets")
-        .eq("id", referido_por)
-        .single()
-        .execute()
-    )
+            usuario_referidor = (
+                supabase.table("usuarios")
+                .select("tickets")
+                .eq("id", referido_por)
+                .single()
+                .execute()
+            )
 
-    tickets_actuales = usuario_referidor.data["tickets"] or 0
+            tickets_actuales = usuario_referidor.data["tickets"] or 0
 
-    supabase.table("usuarios").update({
-        "tickets": tickets_actuales + 1
-    }).eq("id", referido_por).execute()
+            supabase.table("usuarios").update({
+                "tickets": tickets_actuales + 1
+            }).eq("id", referido_por).execute()
 
-    supabase.table("referidos").insert({
-        "usuario_id": referido_por,
-        "referido_id": nuevo_usuario["id"],
-        "codigo_usado": usuario.codigo_referido,
-        "ticket_otorgado": True
-    }).execute()
+            supabase.table("referidos").insert({
+                "usuario_id": referido_por,
+                "referido_id": nuevo_usuario["id"],
+                "codigo_usado": usuario.codigo_referido,
+                "ticket_otorgado": True
+            }).execute()
 
         return {
             "ok": True,
