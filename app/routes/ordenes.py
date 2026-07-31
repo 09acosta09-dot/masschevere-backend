@@ -10,6 +10,50 @@ from app.schemas.orden import OrdenCrear
 router = APIRouter(prefix="/ordenes", tags=["Órdenes"])
 
 
+def validar_administrador(admin_usuario_id: int) -> dict:
+    respuesta_admin = (
+        supabase.table("usuarios")
+        .select("id,rol")
+        .eq("id", admin_usuario_id)
+        .limit(1)
+        .execute()
+    )
+
+    if not respuesta_admin.data:
+        raise HTTPException(
+            status_code=404,
+            detail="Usuario administrador no encontrado",
+        )
+
+    administrador = respuesta_admin.data[0]
+
+    if str(administrador.get("rol", "")).lower() != "admin":
+        raise HTTPException(
+            status_code=403,
+            detail="No tienes permisos para realizar esta acción",
+        )
+
+    return administrador
+
+
+def obtener_orden(orden_id: int) -> dict:
+    respuesta_orden = (
+        supabase.table("ordenes")
+        .select("*")
+        .eq("id", orden_id)
+        .limit(1)
+        .execute()
+    )
+
+    if not respuesta_orden.data:
+        raise HTTPException(
+            status_code=404,
+            detail="Orden no encontrada",
+        )
+
+    return respuesta_orden.data[0]
+
+
 @router.post("/crear")
 def crear_orden(orden: OrdenCrear):
     try:
@@ -70,7 +114,7 @@ def crear_orden(orden: OrdenCrear):
         if not respuesta.data:
             raise HTTPException(
                 status_code=500,
-                detail="La orden no pudo ser registrada"
+                detail="La orden no pudo ser registrada",
             )
 
         return {
@@ -86,7 +130,7 @@ def crear_orden(orden: OrdenCrear):
     except APIError as error:
         raise HTTPException(
             status_code=500,
-            detail=error.message
+            detail=error.message,
         )
 
 
@@ -94,31 +138,11 @@ def crear_orden(orden: OrdenCrear):
 def listar_ordenes(
     admin_usuario_id: int = Query(
         ...,
-        description="ID del usuario administrador"
-    )
+        description="ID del usuario administrador",
+    ),
 ):
     try:
-        respuesta_admin = (
-            supabase.table("usuarios")
-            .select("id,rol")
-            .eq("id", admin_usuario_id)
-            .limit(1)
-            .execute()
-        )
-
-        if not respuesta_admin.data:
-            raise HTTPException(
-                status_code=404,
-                detail="Usuario administrador no encontrado"
-            )
-
-        administrador = respuesta_admin.data[0]
-
-        if str(administrador.get("rol", "")).lower() != "admin":
-            raise HTTPException(
-                status_code=403,
-                detail="No tienes permisos para consultar las órdenes"
-            )
+        validar_administrador(admin_usuario_id)
 
         respuesta_ordenes = (
             supabase.table("ordenes")
@@ -139,5 +163,135 @@ def listar_ordenes(
     except APIError as error:
         raise HTTPException(
             status_code=500,
-            detail=error.message
+            detail=error.message,
+        )
+
+
+@router.post("/{orden_id}/aprobar")
+def aprobar_orden(
+    orden_id: int,
+    admin_usuario_id: int = Query(
+        ...,
+        description="ID del usuario administrador",
+    ),
+):
+    try:
+        validar_administrador(admin_usuario_id)
+
+        orden = obtener_orden(orden_id)
+
+        estado_actual = str(
+            orden.get("estado", "")
+        ).lower()
+
+        if estado_actual in {"pagada", "aprobada"}:
+            return {
+                "ok": True,
+                "mensaje": "La orden ya se encuentra aprobada",
+                "orden": orden,
+            }
+
+        if estado_actual == "cancelada":
+            raise HTTPException(
+                status_code=400,
+                detail="No se puede aprobar una orden cancelada",
+            )
+
+        if estado_actual == "expirada":
+            raise HTTPException(
+                status_code=400,
+                detail="No se puede aprobar una orden expirada",
+            )
+
+        respuesta = (
+            supabase.table("ordenes")
+            .update({"estado": "pagada"})
+            .eq("id", orden_id)
+            .execute()
+        )
+
+        if not respuesta.data:
+            raise HTTPException(
+                status_code=500,
+                detail="No fue posible aprobar la orden",
+            )
+
+        return {
+            "ok": True,
+            "mensaje": "Orden aprobada correctamente",
+            "orden": respuesta.data[0],
+        }
+
+    except HTTPException:
+        raise
+
+    except APIError as error:
+        raise HTTPException(
+            status_code=500,
+            detail=error.message,
+        )
+
+
+@router.post("/{orden_id}/cancelar")
+def cancelar_orden(
+    orden_id: int,
+    admin_usuario_id: int = Query(
+        ...,
+        description="ID del usuario administrador",
+    ),
+):
+    try:
+        validar_administrador(admin_usuario_id)
+
+        orden = obtener_orden(orden_id)
+
+        estado_actual = str(
+            orden.get("estado", "")
+        ).lower()
+
+        if estado_actual == "cancelada":
+            return {
+                "ok": True,
+                "mensaje": "La orden ya se encuentra cancelada",
+                "orden": orden,
+            }
+
+        if estado_actual in {"pagada", "aprobada"}:
+            raise HTTPException(
+                status_code=400,
+                detail="No se puede cancelar una orden que ya fue pagada",
+            )
+
+        if estado_actual == "expirada":
+            raise HTTPException(
+                status_code=400,
+                detail="La orden ya se encuentra expirada",
+            )
+
+        respuesta = (
+            supabase.table("ordenes")
+            .update({"estado": "cancelada"})
+            .eq("id", orden_id)
+            .execute()
+        )
+
+        if not respuesta.data:
+            raise HTTPException(
+                status_code=500,
+                detail="No fue posible cancelar la orden",
+            )
+
+        return {
+            "ok": True,
+            "mensaje": "Orden cancelada correctamente",
+            "orden": respuesta.data[0],
+        }
+
+    except HTTPException:
+        raise
+
+    except APIError as error:
+        raise HTTPException(
+            status_code=500,
+            detail=error.message,
         )
