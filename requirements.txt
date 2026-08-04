@@ -6,3 +6,4 @@ email-validator
 pydantic
 httpx
 pwdlib[argon2]
+python-multipart
