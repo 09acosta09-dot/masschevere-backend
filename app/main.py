@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.routes import usuarios
 from app.routes import auth
 from app.routes import ordenes
+from app.routes import comprobantes
 
 app = FastAPI(
     title="MassChevere API",
@@ -26,6 +27,7 @@ app.add_middleware(
 app.include_router(usuarios.router)
 app.include_router(auth.router)
 app.include_router(ordenes.router)
+app.include_router(comprobantes.router)
 
 
 @app.get("/")
