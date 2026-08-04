@@ -5,6 +5,7 @@ from app.routes import usuarios
 from app.routes import auth
 from app.routes import ordenes
 from app.routes import comprobantes
+from app.routes import premios
 
 app = FastAPI(
     title="MassChevere API",
@@ -28,6 +29,7 @@ app.include_router(usuarios.router)
 app.include_router(auth.router)
 app.include_router(ordenes.router)
 app.include_router(comprobantes.router)
+app.include_router(premios.router)
 
 
 @app.get("/")
