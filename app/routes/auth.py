@@ -1,3 +1,8 @@
+import os
+import random
+from datetime import datetime, timedelta, timezone
+
+import jwt
 from fastapi import APIRouter, HTTPException
 from pwdlib import PasswordHash
 
@@ -5,15 +10,54 @@ from app.database.supabase import supabase
 from app.schemas.usuario import (
     UsuarioLogin,
     RecuperarPassword,
-    RestablecerPassword
+    RestablecerPassword,
 )
 
-router = APIRouter(prefix="/auth", tags=["Autenticación"])
+
+router = APIRouter(
+    prefix="/auth",
+    tags=["Autenticación"],
+)
+
 password_hash = PasswordHash.recommended()
+
+
+def crear_access_token(
+    usuario_id: int,
+    rol: str,
+) -> str:
+
+    secret = os.getenv("JWT_SECRET")
+    algorithm = os.getenv(
+        "JWT_ALGORITHM",
+        "HS256",
+    )
+
+    if not secret:
+        raise HTTPException(
+            status_code=500,
+            detail="JWT_SECRET no está configurado.",
+        )
+
+    ahora = datetime.now(timezone.utc)
+
+    payload = {
+        "sub": str(usuario_id),
+        "rol": rol,
+        "iat": ahora,
+        "exp": ahora + timedelta(hours=24),
+    }
+
+    return jwt.encode(
+        payload,
+        secret,
+        algorithm=algorithm,
+    )
 
 
 @router.post("/login")
 def login(datos: UsuarioLogin):
+
     respuesta = (
         supabase.table("usuarios")
         .select("*")
@@ -23,44 +67,65 @@ def login(datos: UsuarioLogin):
     )
 
     if not respuesta.data:
-        raise HTTPException(status_code=401, detail="Correo o contraseña incorrectos")
+        raise HTTPException(
+            status_code=401,
+            detail="Correo o contraseña incorrectos",
+        )
 
     usuario = respuesta.data[0]
 
     try:
         password_valida = password_hash.verify(
             datos.password,
-            usuario["password"]
+            usuario["password"],
         )
+
     except Exception:
         raise HTTPException(
             status_code=401,
-            detail="Esta cuenta debe restablecer su contraseña"
+            detail=(
+                "Esta cuenta debe restablecer "
+                "su contraseña"
+            ),
         )
 
     if not password_valida:
         raise HTTPException(
             status_code=401,
-            detail="Correo o contraseña incorrectos"
+            detail="Correo o contraseña incorrectos",
         )
+
+    access_token = crear_access_token(
+        usuario["id"],
+        usuario.get("rol", "USUARIO"),
+    )
 
     return {
         "ok": True,
-        "usuario_id": usuario["id"],
-        "nombres": usuario["nombres"],
-        "estado_plan": usuario["estado_plan"],
-        "plan": usuario["plan"],
-        "tickets": usuario["tickets"],
-        "codigo_referido": usuario["codigo_referido"],
-        "referido_por": usuario["referido_por"],
-        "rol": usuario["rol"]
+
+        "access_token": access_token,
+        "token_type": "bearer",
+
+        "usuario": {
+            "usuario_id": usuario["id"],
+            "nombres": usuario["nombres"],
+            "estado_plan": usuario["estado_plan"],
+            "plan": usuario["plan"],
+            "tickets": usuario["tickets"],
+            "codigo_referido":
+                usuario["codigo_referido"],
+            "referido_por":
+                usuario["referido_por"],
+            "rol": usuario["rol"],
+        },
     }
-import random
-from datetime import datetime, timedelta, timezone
 
 
 @router.post("/solicitar-recuperacion")
-def solicitar_recuperacion(datos: RecuperarPassword):
+def solicitar_recuperacion(
+    datos: RecuperarPassword,
+):
+
     usuario = (
         supabase.table("usuarios")
         .select("id,email")
@@ -72,30 +137,48 @@ def solicitar_recuperacion(datos: RecuperarPassword):
     if not usuario.data:
         raise HTTPException(
             status_code=404,
-            detail="No existe una cuenta con ese correo"
+            detail=(
+                "No existe una cuenta "
+                "con ese correo"
+            ),
         )
 
-    codigo = str(random.randint(100000, 999999))
-    expiracion = datetime.now(timezone.utc) + timedelta(minutes=15)
+    codigo = str(
+        random.randint(100000, 999999)
+    )
 
-    supabase.table("recuperacion_password").insert({
+    expiracion = (
+        datetime.now(timezone.utc)
+        + timedelta(minutes=15)
+    )
+
+    supabase.table(
+        "recuperacion_password"
+    ).insert({
         "email": datos.email,
         "codigo": codigo,
         "usado": False,
-        "fecha_expiracion": expiracion.isoformat()
+        "fecha_expiracion":
+            expiracion.isoformat(),
     }).execute()
 
     return {
         "ok": True,
-        "mensaje": "Código generado correctamente",
-        "codigo": codigo
+        "mensaje":
+            "Código generado correctamente",
+        "codigo": codigo,
     }
 
+
 @router.post("/restablecer-password")
-def restablecer_password(datos: RestablecerPassword):
+def restablecer_password(
+    datos: RestablecerPassword,
+):
 
     recuperacion = (
-        supabase.table("recuperacion_password")
+        supabase.table(
+            "recuperacion_password"
+        )
         .select("*")
         .eq("email", datos.email)
         .eq("codigo", datos.codigo)
@@ -107,28 +190,50 @@ def restablecer_password(datos: RestablecerPassword):
     if not recuperacion.data:
         raise HTTPException(
             status_code=400,
-            detail="Código inválido"
+            detail="Código inválido",
         )
 
     codigo = recuperacion.data[0]
 
-    if datetime.fromisoformat(codigo["fecha_expiracion"]) < datetime.now(timezone.utc):
+    fecha_expiracion = datetime.fromisoformat(
+        codigo["fecha_expiracion"]
+    )
+
+    if (
+        fecha_expiracion
+        < datetime.now(timezone.utc)
+    ):
         raise HTTPException(
             status_code=400,
-            detail="El código ya expiró"
+            detail="El código ya expiró",
         )
 
-    nueva_password = password_hash.hash(datos.nueva_password)
+    nueva_password = password_hash.hash(
+        datos.nueva_password
+    )
 
-    supabase.table("usuarios").update({
-        "password": nueva_password
-    }).eq("email", datos.email).execute()
+    (
+        supabase.table("usuarios")
+        .update({
+            "password": nueva_password
+        })
+        .eq("email", datos.email)
+        .execute()
+    )
 
-    supabase.table("recuperacion_password").update({
-        "usado": True
-    }).eq("id", codigo["id"]).execute()
+    (
+        supabase.table(
+            "recuperacion_password"
+        )
+        .update({
+            "usado": True
+        })
+        .eq("id", codigo["id"])
+        .execute()
+    )
 
     return {
         "ok": True,
-        "mensaje": "Contraseña actualizada correctamente"
+        "mensaje":
+            "Contraseña actualizada correctamente",
     }
