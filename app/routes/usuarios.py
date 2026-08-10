@@ -27,9 +27,9 @@ def crear_usuario(usuario: UsuarioCrear):
                     "y autorizar el tratamiento de tus datos personales."
                 ),
             }
-    codigo = "MC" + str(random.randint(100000, 999999))
+        codigo = "MC" + str(random.randint(100000, 999999))
 
-    referido_por = None
+        referido_por = None
 
     if usuario.codigo_referido:
         consulta = (
