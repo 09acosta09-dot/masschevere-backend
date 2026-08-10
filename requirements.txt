@@ -7,3 +7,4 @@ pydantic
 httpx
 pwdlib[argon2]
 python-multipart
+PyJWT==2.13.0
