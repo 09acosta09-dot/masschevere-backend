@@ -2,7 +2,15 @@ import calendar
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query
+import os
+import jwt
+
+from fastapi import (
+    APIRouter,
+    HTTPException,
+    Query,
+    Header,
+)
 from postgrest.exceptions import APIError
 
 from app.database.supabase import supabase
@@ -294,14 +302,91 @@ def revertir_marcado_orden(
     except Exception:
         pass
 
+def obtener_usuario_desde_token(
+    authorization: str | None,
+) -> int:
+
+    if not authorization:
+        raise HTTPException(
+            status_code=401,
+            detail="Debes iniciar sesión",
+        )
+
+    partes = authorization.split()
+
+    if (
+        len(partes) != 2
+        or partes[0].lower() != "bearer"
+    ):
+        raise HTTPException(
+            status_code=401,
+            detail="Credencial de sesión inválida",
+        )
+
+    token = partes[1]
+
+    secret = os.getenv("JWT_SECRET")
+    algorithm = os.getenv(
+        "JWT_ALGORITHM",
+        "HS256",
+    )
+
+    if not secret:
+        raise HTTPException(
+            status_code=500,
+            detail="JWT_SECRET no está configurado",
+        )
+
+    try:
+
+        payload = jwt.decode(
+            token,
+            secret,
+            algorithms=[algorithm],
+        )
+
+        usuario_id = payload.get("sub")
+
+        if not usuario_id:
+            raise HTTPException(
+                status_code=401,
+                detail="Credencial de sesión inválida",
+            )
+
+        return int(usuario_id)
+
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(
+            status_code=401,
+            detail="Tu sesión ha expirado",
+        )
+
+    except (
+        jwt.InvalidTokenError,
+        ValueError,
+        TypeError,
+    ):
+        raise HTTPException(
+            status_code=401,
+            detail="Credencial de sesión inválida",
+        )
 
 @router.post("/crear")
-def crear_orden(orden: OrdenCrear):
+def crear_orden(
+    orden: OrdenCrear,
+    authorization: str | None = Header(
+        default=None
+    ),
+):
+    usuario_id = obtener_usuario_desde_token(
+        authorization
+    )
+
     try:
         ordenes = (
             supabase.table("ordenes")
             .select("*")
-            .eq("usuario_id", orden.usuario_id)
+            .eq("usuario_id", usuario_id)
             .eq("producto", orden.producto)
             .eq("estado", "pendiente")
             .order("creado_en", desc=True)
@@ -345,12 +430,12 @@ def crear_orden(orden: OrdenCrear):
         ).strftime("%Y%m%d%H%M%S")
 
         numero_orden = (
-            f"MC-{fecha}-{orden.usuario_id}"
+            f"MC-{fecha}-{usuario_id}"
         )
 
         datos = {
             "numero_orden": numero_orden,
-            "usuario_id": orden.usuario_id,
+            "usuario_id": usuario_id,
             "producto": orden.producto,
             "tipo": orden.tipo,
             "valor": orden.valor,
