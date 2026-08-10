@@ -8,6 +8,12 @@ class UsuarioCrear(BaseModel):
     password: str
     codigo_referido: str | None = None
 
+    acepta_terminos: bool
+    acepta_tratamiento_datos: bool
+
+    version_terminos: str
+    version_politica_datos: str
+
 
 class UsuarioLogin(BaseModel):
     email: EmailStr

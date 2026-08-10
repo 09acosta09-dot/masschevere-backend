@@ -6,6 +6,7 @@ from pwdlib import PasswordHash
 
 from app.database.supabase import supabase
 from app.schemas.usuario import UsuarioCrear
+from datetime import datetime, timezone
 
 password_hash = PasswordHash.recommended()
 
@@ -14,6 +15,18 @@ router = APIRouter(prefix="/usuarios", tags=["Usuarios"])
 
 @router.post("/crear")
 def crear_usuario(usuario: UsuarioCrear):
+
+        if (
+            not usuario.acepta_terminos
+            or not usuario.acepta_tratamiento_datos
+        ):
+            return {
+                "ok": False,
+                "mensaje": (
+                    "Debes aceptar los Términos y Condiciones "
+                    "y autorizar el tratamiento de tus datos personales."
+                ),
+            }
     codigo = "MC" + str(random.randint(100000, 999999))
 
     referido_por = None
@@ -43,6 +56,11 @@ def crear_usuario(usuario: UsuarioCrear):
         "codigo_referido": codigo,
         "referido_por": referido_por,
         "tickets": 1,
+        "acepta_terminos": usuario.acepta_terminos,
+        "acepta_tratamiento_datos": usuario.acepta_tratamiento_datos,
+        "fecha_aceptacion_legal": datetime.now(timezone.utc).isoformat(),
+        "version_terminos": usuario.version_terminos,
+        "version_politica_datos": usuario.version_politica_datos,
     }
 
     try:
