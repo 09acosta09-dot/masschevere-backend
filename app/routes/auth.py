@@ -1,10 +1,8 @@
 import os
-import random
-import smtplib
-import ssl
+import secrets
 from datetime import datetime, timedelta, timezone
-from email.message import EmailMessage
 
+import httpx
 import jwt
 from fastapi import APIRouter, HTTPException
 from pwdlib import PasswordHash
@@ -63,44 +61,117 @@ def enviar_codigo_recuperacion(
     codigo: str,
 ) -> None:
 
-    smtp_host = os.getenv("SMTP_HOST")
-    smtp_port = int(
-        os.getenv("SMTP_PORT", "465")
-    )
-    smtp_user = os.getenv("SMTP_USER")
-    smtp_password = os.getenv("SMTP_PASSWORD")
-    email_from = os.getenv(
-        "EMAIL_FROM",
-        smtp_user or "",
-    )
+    api_key = os.getenv("RESEND_API_KEY")
 
-    if not all([
-        smtp_host,
-        smtp_user,
-        smtp_password,
-        email_from,
-    ]):
+    if not api_key:
         raise RuntimeError(
-            "La configuración SMTP está incompleta."
+            "RESEND_API_KEY no está configurado."
         )
 
-    mensaje = EmailMessage()
-
-    mensaje["Subject"] = (
-        "Código para recuperar tu cuenta MassChevere"
+    remitente = os.getenv(
+        "EMAIL_FROM",
+        "privacidad@masschevere.com",
     )
 
-    mensaje["From"] = (
-        f"MassChevere <{email_from}>"
-    )
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <body style="
+        margin:0;
+        padding:30px;
+        background:#080808;
+        font-family:Arial,sans-serif;
+    ">
 
-    mensaje["To"] = destinatario
+        <div style="
+            max-width:600px;
+            margin:auto;
+            background:#111111;
+            border:1px solid #FFC400;
+            border-radius:20px;
+            padding:35px;
+            text-align:center;
+        ">
 
-    mensaje.set_content(
-        f"""
-Hola,
+            <h1 style="
+                color:#FFC400;
+                margin:0 0 25px;
+            ">
+                MASSCHEVERE
+            </h1>
 
-Recibimos una solicitud para restablecer la contraseña de tu cuenta MassChevere.
+            <h2 style="
+                color:#FFFFFF;
+                margin-bottom:15px;
+            ">
+                Recuperación de contraseña
+            </h2>
+
+            <p style="
+                color:#CCCCCC;
+                line-height:1.7;
+            ">
+                Recibimos una solicitud para
+                restablecer la contraseña de tu cuenta.
+            </p>
+
+            <p style="
+                color:#CCCCCC;
+            ">
+                Tu código de recuperación es:
+            </p>
+
+            <div style="
+                margin:25px auto;
+                padding:18px;
+                background:#1B1B1B;
+                border-radius:14px;
+                color:#FFC400;
+                font-size:34px;
+                font-weight:bold;
+                letter-spacing:8px;
+            ">
+                {codigo}
+            </div>
+
+            <p style="
+                color:#CCCCCC;
+                line-height:1.7;
+            ">
+                Este código vence en
+                <strong style="color:#FFFFFF;">
+                    15 minutos
+                </strong>.
+            </p>
+
+            <p style="
+                color:#888888;
+                font-size:13px;
+                margin-top:30px;
+            ">
+                Si tú no solicitaste este cambio,
+                puedes ignorar este mensaje.
+            </p>
+
+            <p style="
+                color:#666666;
+                font-size:12px;
+                margin-top:25px;
+            ">
+                MassChevere.com
+            </p>
+
+        </div>
+
+    </body>
+    </html>
+    """
+
+    texto = f"""
+MassChevere
+
+Recibimos una solicitud para restablecer
+la contraseña de tu cuenta.
 
 Tu código de recuperación es:
 
@@ -108,118 +179,45 @@ Tu código de recuperación es:
 
 Este código vence en 15 minutos.
 
-Si tú no solicitaste este cambio, puedes ignorar este mensaje.
+Si tú no solicitaste este cambio,
+puedes ignorar este mensaje.
 
-MassChevere
-https://masschevere.com
+MassChevere.com
 """
+
+    respuesta = httpx.post(
+        "https://api.resend.com/emails",
+        headers={
+            "Authorization":
+                f"Bearer {api_key}",
+            "Content-Type":
+                "application/json",
+            "User-Agent":
+                "MassChevere-Backend/1.0",
+        },
+        json={
+            "from":
+                f"MassChevere <{remitente}>",
+            "to": [destinatario],
+            "subject":
+                "Código para recuperar tu cuenta MassChevere",
+            "html": html,
+            "text": texto,
+        },
+        timeout=20.0,
     )
 
-    mensaje.add_alternative(
-        f"""
-<!DOCTYPE html>
-<html>
-<body style="
-    margin:0;
-    padding:30px;
-    background:#080808;
-    font-family:Arial,sans-serif;
-">
+    if not 200 <= respuesta.status_code < 300:
 
-<div style="
-    max-width:600px;
-    margin:auto;
-    background:#111;
-    border:1px solid #FFC400;
-    border-radius:20px;
-    padding:35px;
-    text-align:center;
-">
+        try:
+            detalle = respuesta.json()
+        except Exception:
+            detalle = respuesta.text
 
-    <h1 style="
-        color:#FFC400;
-        margin-bottom:25px;
-    ">
-        MASSCHEVERE
-    </h1>
-
-    <h2 style="
-        color:#FFFFFF;
-        margin-bottom:15px;
-    ">
-        Recuperación de contraseña
-    </h2>
-
-    <p style="
-        color:#CCCCCC;
-        line-height:1.7;
-    ">
-        Recibimos una solicitud para restablecer
-        la contraseña de tu cuenta.
-    </p>
-
-    <p style="
-        color:#CCCCCC;
-    ">
-        Tu código de recuperación es:
-    </p>
-
-    <div style="
-        margin:25px auto;
-        padding:18px;
-        background:#1B1B1B;
-        border-radius:14px;
-        color:#FFC400;
-        font-size:34px;
-        font-weight:bold;
-        letter-spacing:8px;
-    ">
-        {codigo}
-    </div>
-
-    <p style="
-        color:#CCCCCC;
-        line-height:1.7;
-    ">
-        El código vence en
-        <strong style="color:#FFFFFF;">
-            15 minutos
-        </strong>.
-    </p>
-
-    <p style="
-        color:#888;
-        font-size:13px;
-        margin-top:30px;
-    ">
-        Si tú no solicitaste este cambio,
-        puedes ignorar este mensaje.
-    </p>
-
-</div>
-
-</body>
-</html>
-""",
-        subtype="html",
-    )
-
-    contexto = ssl.create_default_context()
-
-    with smtplib.SMTP_SSL(
-        smtp_host,
-        smtp_port,
-        context=contexto,
-        timeout=20,
-    ) as servidor:
-
-        servidor.login(
-            smtp_user,
-            smtp_password,
-        )
-
-        servidor.send_message(
-            mensaje
+        raise RuntimeError(
+            f"Resend respondió "
+            f"{respuesta.status_code}: "
+            f"{detalle}"
         )
 
 
@@ -265,24 +263,41 @@ def login(datos: UsuarioLogin):
 
     access_token = crear_access_token(
         usuario["id"],
-        usuario.get("rol", "USUARIO"),
+        usuario.get(
+            "rol",
+            "USUARIO",
+        ),
     )
 
     return {
         "ok": True,
         "access_token": access_token,
         "token_type": "bearer",
+
         "usuario": {
-            "usuario_id": usuario["id"],
-            "nombres": usuario["nombres"],
-            "estado_plan": usuario["estado_plan"],
-            "plan": usuario["plan"],
-            "tickets": usuario["tickets"],
+            "usuario_id":
+                usuario["id"],
+
+            "nombres":
+                usuario["nombres"],
+
+            "estado_plan":
+                usuario["estado_plan"],
+
+            "plan":
+                usuario["plan"],
+
+            "tickets":
+                usuario["tickets"],
+
             "codigo_referido":
                 usuario["codigo_referido"],
+
             "referido_por":
                 usuario["referido_por"],
-            "rol": usuario["rol"],
+
+            "rol":
+                usuario["rol"],
         },
     }
 
@@ -300,18 +315,21 @@ def solicitar_recuperacion(
         .execute()
     )
 
-    # No revelamos si el correo existe o no.
+    mensaje_generico = {
+        "ok": True,
+        "mensaje": (
+            "Si el correo está registrado, "
+            "recibirás un código de recuperación."
+        ),
+    }
+
+    # No revelar si el correo existe.
     if not usuario.data:
-        return {
-            "ok": True,
-            "mensaje": (
-                "Si el correo está registrado, "
-                "recibirás un código de recuperación."
-            ),
-        }
+        return mensaje_generico
 
     codigo = str(
-        random.randint(100000, 999999)
+        100000
+        + secrets.randbelow(900000)
     )
 
     expiracion = (
@@ -319,7 +337,7 @@ def solicitar_recuperacion(
         + timedelta(minutes=15)
     )
 
-    # Invalidar códigos anteriores del mismo correo.
+    # Invalidar códigos anteriores.
     (
         supabase.table(
             "recuperacion_password"
@@ -327,8 +345,14 @@ def solicitar_recuperacion(
         .update({
             "usado": True
         })
-        .eq("email", datos.email)
-        .eq("usado", False)
+        .eq(
+            "email",
+            datos.email,
+        )
+        .eq(
+            "usado",
+            False,
+        )
         .execute()
     )
 
@@ -337,9 +361,15 @@ def solicitar_recuperacion(
             "recuperacion_password"
         )
         .insert({
-            "email": datos.email,
-            "codigo": codigo,
-            "usado": False,
+            "email":
+                datos.email,
+
+            "codigo":
+                codigo,
+
+            "usado":
+                False,
+
             "fecha_expiracion":
                 expiracion.isoformat(),
         })
@@ -363,7 +393,8 @@ def solicitar_recuperacion(
 
     except Exception as error:
 
-        # Inutilizamos el código si el correo no pudo salir.
+        # El código queda inutilizado
+        # si el correo no pudo enviarse.
         (
             supabase.table(
                 "recuperacion_password"
@@ -379,25 +410,20 @@ def solicitar_recuperacion(
         )
 
         print(
-            "Error enviando correo de recuperación:",
+            "Error enviando correo "
+            "de recuperación:",
             repr(error),
         )
 
         raise HTTPException(
             status_code=500,
             detail=(
-                "No fue posible enviar el correo "
-                "de recuperación."
+                "No fue posible enviar "
+                "el correo de recuperación."
             ),
         )
 
-    return {
-        "ok": True,
-        "mensaje": (
-            "Si el correo está registrado, "
-            "recibirás un código de recuperación."
-        ),
-    }
+    return mensaje_generico
 
 
 @router.post("/restablecer-password")
@@ -410,9 +436,18 @@ def restablecer_password(
             "recuperacion_password"
         )
         .select("*")
-        .eq("email", datos.email)
-        .eq("codigo", datos.codigo)
-        .eq("usado", False)
+        .eq(
+            "email",
+            datos.email,
+        )
+        .eq(
+            "codigo",
+            datos.codigo,
+        )
+        .eq(
+            "usado",
+            False,
+        )
         .order(
             "fecha_expiracion",
             desc=True,
@@ -424,7 +459,10 @@ def restablecer_password(
     if not recuperacion.data:
         raise HTTPException(
             status_code=400,
-            detail="Código inválido o ya utilizado.",
+            detail=(
+                "Código inválido "
+                "o ya utilizado."
+            ),
         )
 
     codigo = recuperacion.data[0]
@@ -442,6 +480,7 @@ def restablecer_password(
         fecha_expiracion
         < datetime.now(timezone.utc)
     ):
+
         (
             supabase.table(
                 "recuperacion_password"
@@ -449,7 +488,10 @@ def restablecer_password(
             .update({
                 "usado": True
             })
-            .eq("id", codigo["id"])
+            .eq(
+                "id",
+                codigo["id"],
+            )
             .execute()
         )
 
@@ -465,9 +507,13 @@ def restablecer_password(
     respuesta_usuario = (
         supabase.table("usuarios")
         .update({
-            "password": nueva_password
+            "password":
+                nueva_password
         })
-        .eq("email", datos.email)
+        .eq(
+            "email",
+            datos.email,
+        )
         .execute()
     )
 
@@ -487,13 +533,17 @@ def restablecer_password(
         .update({
             "usado": True
         })
-        .eq("id", codigo["id"])
+        .eq(
+            "id",
+            codigo["id"],
+        )
         .execute()
     )
 
     return {
         "ok": True,
         "mensaje": (
-            "Contraseña actualizada correctamente."
+            "Contraseña actualizada "
+            "correctamente."
         ),
     }
