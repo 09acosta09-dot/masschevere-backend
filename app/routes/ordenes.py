@@ -23,29 +23,44 @@ PLANES_MEMBRESIA = {
     "Plan Mensual": {
         "meses": 1,
         "tickets": 1,
+        "valor": 10000,
     },
     "Plan Trimestral": {
         "meses": 3,
         "tickets": 3,
+        "valor": 27000,
     },
     "Plan Semestral": {
         "meses": 6,
         "tickets": 6,
+        "valor": 51000,
     },
     "Plan Anual": {
         "meses": 12,
         "tickets": 12,
+        "valor": 90000,
     },
 }
 
 
 PAQUETES_TICKETS = {
-    "Paquete de 10 Tickets": 10,
-    "Paquete de 25 Tickets": 25,
-    "Paquete de 50 Tickets": 50,
-    "Paquete de 100 Tickets": 100,
+    "Paquete de 10 Tickets": {
+        "tickets": 10,
+        "valor": 10000,
+    },
+    "Paquete de 25 Tickets": {
+        "tickets": 25,
+        "valor": 22500,
+    },
+    "Paquete de 50 Tickets": {
+        "tickets": 50,
+        "valor": 40000,
+    },
+    "Paquete de 100 Tickets": {
+        "tickets": 100,
+        "valor": 75000,
+    },
 }
-
 
 def obtener_orden(orden_id: int) -> dict:
     respuesta_orden = (
@@ -216,12 +231,12 @@ def calcular_actualizacion_usuario(
 
         return datos_usuario, mensaje
 
-    if tipo == "tickets":
-        cantidad_tickets = PAQUETES_TICKETS.get(
+        if tipo == "tickets":
+        configuracion = PAQUETES_TICKETS.get(
             producto
         )
 
-        if cantidad_tickets is None:
+        if not configuracion:
             raise HTTPException(
                 status_code=400,
                 detail=(
@@ -230,10 +245,14 @@ def calcular_actualizacion_usuario(
                 ),
             )
 
+        cantidad_tickets = int(
+            configuracion["tickets"]
+        )
+
         datos_usuario = {
             "tickets": (
                 tickets_actuales
-                + int(cantidad_tickets)
+                + cantidad_tickets
             ),
         }
 
@@ -389,6 +408,26 @@ def crear_orden(
         authorization
     )
 
+    producto = orden.producto.strip()
+
+    if producto in PLANES_MEMBRESIA:
+        tipo = "membresia"
+        valor = int(
+            PLANES_MEMBRESIA[producto]["valor"]
+        )
+
+    elif producto in PAQUETES_TICKETS:
+        tipo = "tickets"
+        valor = int(
+            PAQUETES_TICKETS[producto]["valor"]
+        )
+
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail="Producto no válido",
+        )
+
     try:
         ordenes = (
             supabase.table("ordenes")
@@ -443,9 +482,9 @@ def crear_orden(
         datos = {
             "numero_orden": numero_orden,
             "usuario_id": usuario_id,
-            "producto": orden.producto,
-            "tipo": orden.tipo,
-            "valor": orden.valor,
+            "producto": producto,
+            "tipo": tipo,
+            "valor": valor,
             "metodo_pago": orden.metodo_pago,
             "estado": "pendiente",
             "beneficios_aplicados": False,
