@@ -232,36 +232,36 @@ def calcular_actualizacion_usuario(
         return datos_usuario, mensaje
 
         if tipo == "tickets":
-        configuracion = PAQUETES_TICKETS.get(
-            producto
-        )
-
-        if not configuracion:
-            raise HTTPException(
-                status_code=400,
-                detail=(
-                    "El paquete de tickets no está "
-                    f"configurado: {producto}"
-                ),
+            configuracion = PAQUETES_TICKETS.get(
+                producto
             )
 
-        cantidad_tickets = int(
-            configuracion["tickets"]
-        )
+            if not configuracion:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        "El paquete de tickets no está "
+                        f"configurado: {producto}"
+                    ),
+                )
 
-        datos_usuario = {
-            "tickets": (
-                tickets_actuales
-                + cantidad_tickets
-            ),
-        }
+            cantidad_tickets = int(
+                configuracion["tickets"]
+            )
 
-        mensaje = (
-            f"{cantidad_tickets} tickets "
-            "agregados correctamente"
-        )
+            datos_usuario = {
+                "tickets": (
+                    tickets_actuales
+                    + cantidad_tickets
+                ),
+            }
 
-        return datos_usuario, mensaje
+            mensaje = (
+                f"{cantidad_tickets} tickets "
+                "agregados correctamente"
+            )
+
+            return datos_usuario, mensaje
 
     raise HTTPException(
         status_code=400,
