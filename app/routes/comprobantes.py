@@ -4,7 +4,15 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 from uuid import uuid4
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+import jwt
+from fastapi import (
+    APIRouter,
+    File,
+    Form,
+    Header,
+    HTTPException,
+    UploadFile,
+)
 from postgrest.exceptions import APIError
 
 from app.database.supabase import supabase
@@ -25,6 +33,75 @@ TIPOS_PERMITIDOS = {
 }
 
 
+def obtener_usuario_desde_token(
+    authorization: str | None,
+) -> int:
+
+    if not authorization:
+        raise HTTPException(
+            status_code=401,
+            detail="Debes iniciar sesión",
+        )
+
+    partes = authorization.split()
+
+    if (
+        len(partes) != 2
+        or partes[0].lower() != "bearer"
+    ):
+        raise HTTPException(
+            status_code=401,
+            detail="Credencial de sesión inválida",
+        )
+
+    token = partes[1]
+
+    secret = os.getenv("JWT_SECRET")
+    algorithm = os.getenv(
+        "JWT_ALGORITHM",
+        "HS256",
+    )
+
+    if not secret:
+        raise HTTPException(
+            status_code=500,
+            detail="JWT_SECRET no está configurado",
+        )
+
+    try:
+        payload = jwt.decode(
+            token,
+            secret,
+            algorithms=[algorithm],
+        )
+
+        usuario_id = payload.get("sub")
+
+        if not usuario_id:
+            raise HTTPException(
+                status_code=401,
+                detail="Credencial de sesión inválida",
+            )
+
+        return int(usuario_id)
+
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(
+            status_code=401,
+            detail="Tu sesión ha expirado",
+        )
+
+    except (
+        jwt.InvalidTokenError,
+        ValueError,
+        TypeError,
+    ):
+        raise HTTPException(
+            status_code=401,
+            detail="Credencial de sesión inválida",
+        )
+
+
 def obtener_token_telegram() -> str:
     token = os.getenv("TELEGRAM_BOT_TOKEN")
 
@@ -37,31 +114,51 @@ def obtener_token_telegram() -> str:
     return token
 
 
-def consultar_telegram(endpoint: str, datos: dict | None = None) -> dict:
+def consultar_telegram(
+    endpoint: str,
+    datos: dict | None = None,
+) -> dict:
+
     token = obtener_token_telegram()
 
     url = (
-        f"https://api.telegram.org/bot{token}/{endpoint}"
+        f"https://api.telegram.org/bot"
+        f"{token}/{endpoint}"
     )
 
     cuerpo = None
     encabezados = {}
 
     if datos is not None:
-        cuerpo = json.dumps(datos).encode("utf-8")
-        encabezados["Content-Type"] = "application/json"
+        cuerpo = json.dumps(
+            datos
+        ).encode("utf-8")
+
+        encabezados[
+            "Content-Type"
+        ] = "application/json"
 
     solicitud = Request(
         url,
         data=cuerpo,
         headers=encabezados,
-        method="POST" if datos is not None else "GET",
+        method=(
+            "POST"
+            if datos is not None
+            else "GET"
+        ),
     )
 
     try:
-        with urlopen(solicitud, timeout=15) as respuesta:
+        with urlopen(
+            solicitud,
+            timeout=15,
+        ) as respuesta:
+
             resultado = json.loads(
-                respuesta.read().decode("utf-8")
+                respuesta.read().decode(
+                    "utf-8"
+                )
             )
 
     except HTTPError as error:
@@ -72,14 +169,18 @@ def consultar_telegram(endpoint: str, datos: dict | None = None) -> dict:
 
         raise HTTPException(
             status_code=500,
-            detail=f"Error de Telegram: {detalle}",
+            detail=(
+                f"Error de Telegram: "
+                f"{detalle}"
+            ),
         )
 
     except URLError as error:
         raise HTTPException(
             status_code=500,
             detail=(
-                "No fue posible conectar con Telegram: "
+                "No fue posible conectar "
+                "con Telegram: "
                 f"{error.reason}"
             ),
         )
@@ -96,13 +197,20 @@ def consultar_telegram(endpoint: str, datos: dict | None = None) -> dict:
     return resultado
 
 
-def enviar_notificacion_pago(orden: dict) -> bool:
-    chat_id = os.getenv("TELEGRAM_CHAT_ID")
+def enviar_notificacion_pago(
+    orden: dict,
+) -> bool:
+
+    chat_id = os.getenv(
+        "TELEGRAM_CHAT_ID"
+    )
 
     if not chat_id:
         return False
 
-    valor = int(orden.get("valor") or 0)
+    valor = int(
+        orden.get("valor") or 0
+    )
 
     valor_formateado = (
         f"${valor:,.0f}"
@@ -111,10 +219,13 @@ def enviar_notificacion_pago(orden: dict) -> bool:
 
     mensaje = (
         "🔔 NUEVO PAGO PENDIENTE\n\n"
-        f"🧾 Orden: {orden.get('numero_orden', '-')}\n"
-        f"📦 Producto: {orden.get('producto', '-')}\n"
+        f"🧾 Orden: "
+        f"{orden.get('numero_orden', '-')}\n"
+        f"📦 Producto: "
+        f"{orden.get('producto', '-')}\n"
         f"💰 Valor: {valor_formateado}\n"
-        f"💳 Método: {orden.get('metodo_pago', '-')}\n\n"
+        f"💳 Método: "
+        f"{orden.get('metodo_pago', '-')}\n\n"
         "📷 Comprobante recibido\n\n"
         "👉 https://masschevere.com/admin/"
     )
@@ -135,15 +246,22 @@ def enviar_notificacion_pago(orden: dict) -> bool:
 def test():
     return {
         "ok": True,
-        "mensaje": "Ruta de comprobantes funcionando",
+        "mensaje":
+            "Ruta de comprobantes funcionando",
     }
 
 
 @router.get("/telegram/chat-id")
 def obtener_chat_id():
-    resultado = consultar_telegram("getUpdates")
 
-    actualizaciones = resultado.get("result", [])
+    resultado = consultar_telegram(
+        "getUpdates"
+    )
+
+    actualizaciones = resultado.get(
+        "result",
+        [],
+    )
 
     if not actualizaciones:
         raise HTTPException(
@@ -154,18 +272,30 @@ def obtener_chat_id():
             ),
         )
 
-    ultima_actualizacion = actualizaciones[-1]
+    ultima_actualizacion = (
+        actualizaciones[-1]
+    )
 
     mensaje = (
         ultima_actualizacion.get("message")
-        or ultima_actualizacion.get("edited_message")
-        or ultima_actualizacion.get("channel_post")
+        or ultima_actualizacion.get(
+            "edited_message"
+        )
+        or ultima_actualizacion.get(
+            "channel_post"
+        )
     )
 
-    if not mensaje or not mensaje.get("chat"):
+    if (
+        not mensaje
+        or not mensaje.get("chat")
+    ):
         raise HTTPException(
             status_code=404,
-            detail="No fue posible identificar el chat.",
+            detail=(
+                "No fue posible identificar "
+                "el chat."
+            ),
         )
 
     chat = mensaje["chat"]
@@ -182,11 +312,25 @@ def obtener_chat_id():
 async def subir_comprobante(
     orden_id: int = Form(...),
     archivo: UploadFile = File(...),
+    authorization: str | None = Header(
+        default=None
+    ),
 ):
-    if archivo.content_type not in TIPOS_PERMITIDOS:
+
+    usuario_id = obtener_usuario_desde_token(
+        authorization
+    )
+
+    if (
+        archivo.content_type
+        not in TIPOS_PERMITIDOS
+    ):
         raise HTTPException(
             status_code=400,
-            detail="Solo se permiten imágenes JPG, PNG o WEBP.",
+            detail=(
+                "Solo se permiten imágenes "
+                "JPG, PNG o WEBP."
+            ),
         )
 
     contenido = await archivo.read()
@@ -200,7 +344,10 @@ async def subir_comprobante(
     if len(contenido) > TAMANO_MAXIMO:
         raise HTTPException(
             status_code=400,
-            detail="La imagen no puede superar los 5 MB.",
+            detail=(
+                "La imagen no puede superar "
+                "los 5 MB."
+            ),
         )
 
     try:
@@ -220,6 +367,20 @@ async def subir_comprobante(
 
         orden = consulta_orden.data[0]
 
+        # La orden debe pertenecer
+        # al usuario autenticado.
+        if int(
+            orden.get("usuario_id") or 0
+        ) != usuario_id:
+
+            raise HTTPException(
+                status_code=403,
+                detail=(
+                    "No tienes permiso para "
+                    "modificar esta orden."
+                ),
+            )
+
         estado = str(
             orden.get("estado", "")
         ).lower()
@@ -228,8 +389,9 @@ async def subir_comprobante(
             raise HTTPException(
                 status_code=400,
                 detail=(
-                    "Solo se puede adjuntar comprobante "
-                    "a una orden pendiente."
+                    "Solo se puede adjuntar "
+                    "comprobante a una orden "
+                    "pendiente."
                 ),
             )
 
@@ -242,11 +404,14 @@ async def subir_comprobante(
             f"{uuid4().hex}{extension}"
         )
 
-        supabase.storage.from_(BUCKET).upload(
+        supabase.storage.from_(
+            BUCKET
+        ).upload(
             path=nombre_archivo,
             file=contenido,
             file_options={
-                "content-type": archivo.content_type,
+                "content-type":
+                    archivo.content_type,
                 "cache-control": "3600",
                 "upsert": "false",
             },
@@ -255,15 +420,19 @@ async def subir_comprobante(
         url_publica = (
             supabase.storage
             .from_(BUCKET)
-            .get_public_url(nombre_archivo)
+            .get_public_url(
+                nombre_archivo
+            )
         )
 
         respuesta = (
             supabase.table("ordenes")
             .update({
-                "comprobante_url": url_publica,
+                "comprobante_url":
+                    url_publica,
             })
             .eq("id", orden_id)
+            .eq("usuario_id", usuario_id)
             .execute()
         )
 
@@ -271,12 +440,15 @@ async def subir_comprobante(
             raise HTTPException(
                 status_code=500,
                 detail=(
-                    "La imagen subió, pero no se pudo "
-                    "actualizar la orden."
+                    "La imagen subió, pero "
+                    "no se pudo actualizar "
+                    "la orden."
                 ),
             )
 
-        orden_actualizada = respuesta.data[0]
+        orden_actualizada = (
+            respuesta.data[0]
+        )
 
         notificacion_enviada = False
 
@@ -286,18 +458,24 @@ async def subir_comprobante(
                     orden_actualizada
                 )
             )
+
         except Exception as error:
             print(
-                "No fue posible enviar la notificación:",
+                "No fue posible enviar "
+                "la notificación:",
                 str(error),
             )
 
         return {
             "ok": True,
-            "mensaje": "Comprobante subido correctamente",
-            "comprobante_url": url_publica,
-            "notificacion_enviada": notificacion_enviada,
-            "orden": orden_actualizada,
+            "mensaje":
+                "Comprobante subido correctamente",
+            "comprobante_url":
+                url_publica,
+            "notificacion_enviada":
+                notificacion_enviada,
+            "orden":
+                orden_actualizada,
         }
 
     except HTTPException:
