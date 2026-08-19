@@ -22,6 +22,7 @@ TIPOS_PERMITIDOS = {
 BUCKETS_PERMITIDOS = {
     "premios",
     "comprobantes",
+    "aliados",
 }
 
 
