@@ -293,6 +293,9 @@ def login(datos: UsuarioLogin):
             "codigo_referido":
                 usuario["codigo_referido"],
 
+            "qr_token":
+                str(usuario["qr_token"]),
+
             "referido_por":
                 usuario["referido_por"],
 
