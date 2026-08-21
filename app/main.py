@@ -8,6 +8,7 @@ from app.routes import comprobantes
 from app.routes import premios
 from app.routes import upload
 from app.routes import aliados
+from app.routes import verificacion
 
 app = FastAPI(
     title="MassChevere API",
@@ -34,7 +35,7 @@ app.include_router(comprobantes.router)
 app.include_router(premios.router)
 app.include_router(upload.router)
 app.include_router(aliados.router)
-
+app.include_router(verificacion.router)
 
 @app.get("/")
 def inicio():
