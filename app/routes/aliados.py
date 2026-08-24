@@ -19,6 +19,8 @@ class AliadoCrear(BaseModel):
     descripcion: Optional[str] = None
     logo_url: Optional[str] = None
     direccion: Optional[str] = None
+    ciudad: Optional[str] = None
+    departamento: Optional[str] = None
     instagram: Optional[str] = None
     whatsapp: Optional[str] = None
     estado: str = "activo"
@@ -31,6 +33,8 @@ class AliadoEditar(BaseModel):
     descripcion: Optional[str] = None
     logo_url: Optional[str] = None
     direccion: Optional[str] = None
+    ciudad: Optional[str] = None
+    departamento: Optional[str] = None
     instagram: Optional[str] = None
     whatsapp: Optional[str] = None
     estado: Optional[str] = None
